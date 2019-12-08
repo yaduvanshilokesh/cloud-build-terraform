@@ -7,6 +7,6 @@ steps:
   name: hashicorp/terraform:0.12.0
   args: ['apply', '-auto-approve']
 
-- id: terraform-apply
+- id: terraform-destroy
   name: hashicorp/terraform:0.12.0
   args: ['destroy', '-auto-approve']
