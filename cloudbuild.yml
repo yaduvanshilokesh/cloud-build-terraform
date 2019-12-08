@@ -1,0 +1,8 @@
+- id: 'Deploy Infra'
+  name: 'hashicorp/terraform:0.11.14'
+  entrypoint: 'sh'
+  args:
+  - '-c'
+  - |
+      terraform init
+      terraform apply -auto-approve
