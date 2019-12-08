@@ -1,5 +1,5 @@
 terraform {
   backend "gcs" {
-    bucket = var.projectName
+    bucket = "fourth-physics-260609-tfstate"
   }
 }
