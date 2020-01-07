@@ -1,5 +1,5 @@
 provider "google"{
-	#credentials=file(var.credentials)
+	credentials=file(var.credentials)
 	project=var.projectName
 	region=var.regionName
   	zone=var.zoneName
@@ -13,7 +13,7 @@ resource "google_compute_network" "test-vpc"{
 resource "google_compute_subnetwork" "test-subnet"{
 	name="test-subnet"
 	network=google_compute_network.test-vpc.name
-	ip_cidr_range="10.0.0.0/24"
+	ip_cidr_range="10.0.16.0/24"
 }
 
 resource "google_compute_firewall" "test-vpc-http"{
@@ -87,16 +87,36 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
 }
 
-resource "random_id" "db_name_suffix" {
+resource "random_id" "db_name_suffix1" {
   byte_length = 4
 }
 
-resource "google_sql_database_instance" "db-instance" {
+resource "random_id" "db_name_suffix2" {
+  byte_length = 4
+}
 
-  name   = "private-instance-${random_id.db_name_suffix.hex}"
+resource "google_sql_database_instance" "db-instance1" {
+
+  name   = "private-instance-${random_id.db_name_suffix1.hex}"
   region=var.regionName
   database_version = "POSTGRES_9_6"
   depends_on = [google_service_networking_connection.private_vpc_connection]
+
+  settings {
+    tier = "db-f1-micro"
+    ip_configuration {
+      ipv4_enabled    = false
+      private_network = google_compute_network.test-vpc.self_link
+    }
+  }
+}
+
+resource "google_sql_database_instance" "db-instance2" {
+
+  name   = "private-instance-${random_id.db_name_suffix2.hex}"
+  region=var.regionName
+  database_version = "POSTGRES_9_6"
+  depends_on = [google_service_networking_connection.private_vpc_connection , google_sql_database_instance.db-instance1]
 
   settings {
     tier = "db-f1-micro"
@@ -122,4 +142,47 @@ resource "google_compute_router_nat" "test-nat"{
 	router=google_compute_router.nat-router.name
 	nat_ip_allocate_option="AUTO_ONLY"
 	source_subnetwork_ip_ranges_to_nat="ALL_SUBNETWORKS_ALL_IP_RANGES"
+}
+
+resource "google_container_cluster" "primary" {
+  name     = "test-gke-cluster"
+  #location = "us-central1"
+  remove_default_node_pool = true
+  initial_node_count       = 3
+
+  master_auth {
+    username = ""
+    password = ""
+
+    client_certificate_config {
+      issue_client_certificate = false
+    }
+  }
+  network = google_compute_network.test-vpc.self_link
+  subnetwork=google_compute_subnetwork.test-subnet.name
+}
+
+resource "google_container_node_pool" "primary_preemptible_nodes" {
+  name       = "my-node-pool"
+  #location   = "us-central1"
+  cluster    = google_container_cluster.primary.name
+  node_count = 3
+
+  node_config {
+    preemptible  = true
+    machine_type = "f1-micro"
+
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
+
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring",
+    ]
+  }
+}
+
+resource "google_storage_bucket" "test-bucket" {
+  name     = "bucket-${random_id.db_name_suffix2.hex}"
 }
